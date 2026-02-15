@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto Futures Backtester</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* ============================================================
+       CSS Reset & Base
+       ============================================================ */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    a { color: #4ecdc4; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ============================================================
+       Layout
+       ============================================================ */
+    .container {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 20px 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    /* ============================================================
+       Card
+       ============================================================ */
+    .card {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .card h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #ffffff;
+      border-bottom: 1px solid #0f3460;
+      padding-bottom: 10px;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 400px;
+      width: 100%;
+    }
+
+    /* ============================================================
+       Header
+       ============================================================ */
+    header {
+      text-align: center;
+      padding: 40px 0 20px;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+
+    header h1 span {
+      color: #00ff88;
+    }
+
+    header p {
+      font-size: 1rem;
+      color: #8888aa;
+    }
+
+    /* ============================================================
+       Table
+       ============================================================ */
+    .table-wrapper {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    th, td {
+      padding: 10px 14px;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th {
+      background: #0f3460;
+      color: #ffffff;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      position: sticky;
+      top: 0;
+    }
+
+    th:hover {
+      background: #1a4a8a;
+    }
+
+    th:first-child, td:first-child {
+      text-align: left;
+    }
+
+    tr:nth-child(even) {
+      background: rgba(15, 52, 96, 0.25);
+    }
+
+    tr:hover {
+      background: rgba(15, 52, 96, 0.5);
+    }
+
+    .positive { color: #00ff88; }
+    .negative { color: #ff4444; }
+    .best-cell { background: rgba(0, 255, 136, 0.12); font-weight: 700; }
+
+    /* ============================================================
+       Heatmap
+       ============================================================ */
+    .heatmap-grid {
+      display: grid;
+      gap: 2px;
+      font-size: 0.75rem;
+      overflow-x: auto;
+    }
+
+    .heatmap-cell {
+      padding: 6px 8px;
+      text-align: center;
+      border-radius: 4px;
+      font-weight: 500;
+      min-width: 60px;
+    }
+
+    .heatmap-header {
+      background: #0f3460;
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .heatmap-label {
+      background: transparent;
+      color: #aaa;
+      text-align: left;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ============================================================
+       Filters & Controls
+       ============================================================ */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+      align-items: center;
+    }
+
+    .controls label {
+      font-size: 0.85rem;
+      color: #8888aa;
+    }
+
+    select, input[type="text"] {
+      background: #0f3460;
+      color: #e0e0e0;
+      border: 1px solid #1a4a8a;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      outline: none;
+    }
+
+    select:focus, input:focus {
+      border-color: #4ecdc4;
+    }
+
+    button {
+      background: #0f3460;
+      color: #e0e0e0;
+      border: 1px solid #1a4a8a;
+      border-radius: 6px;
+      padding: 6px 16px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #1a4a8a;
+    }
+
+    button.active {
+      background: #4ecdc4;
+      color: #1a1a2e;
+      border-color: #4ecdc4;
+    }
+
+    /* ============================================================
+       Pagination
+       ============================================================ */
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      font-size: 0.85rem;
+    }
+
+    .pagination button {
+      min-width: 36px;
+    }
+
+    .pagination span {
+      color: #8888aa;
+    }
+
+    /* ============================================================
+       Loading / Error state
+       ============================================================ */
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: #8888aa;
+    }
+
+    .loading .spinner {
+      display: inline-block;
+      width: 40px;
+      height: 40px;
+      border: 3px solid #0f3460;
+      border-top-color: #00ff88;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error-msg {
+      color: #ff4444;
+      text-align: center;
+      padding: 40px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================
+       Header
+       ============================================================ -->
+  <header>
+    <h1><span>Crypto Futures</span> Backtester</h1>
+    <p>Strategy Performance Dashboard</p>
+  </header>
+
+  <div class="container">
+    <div id="app-loading" class="loading">
+      <div class="spinner"></div>
+      <p>Loading backtest results...</p>
+    </div>
+
+    <div id="app-content" style="display:none;">
+
+      <!-- Section 1: Strategy Comparison Table -->
+      <div class="grid" style="margin-bottom:24px;">
+        <div class="card">
+          <h2>Strategy Comparison</h2>
+          <div class="table-wrapper">
+            <table id="comparison-table">
+              <thead>
+                <tr>
+                  <th data-col="strategyName" data-type="string">Strategy</th>
+                  <th data-col="leverage" data-type="number">Leverage</th>
+                  <th data-col="totalTrades" data-type="number">Trades</th>
+                  <th data-col="winRate" data-type="number">Win Rate</th>
+                  <th data-col="totalPnl" data-type="number">P&amp;L ($)</th>
+                  <th data-col="totalPnlPercent" data-type="number">P&amp;L (%)</th>
+                  <th data-col="profitFactor" data-type="number">Profit Factor</th>
+                  <th data-col="maxDrawdownPercent" data-type="number">Max DD (%)</th>
+                  <th data-col="sharpeRatio" data-type="number">Sharpe</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2 & 4: Equity Curves + Drawdown -->
+      <div class="grid-2">
+        <div class="card">
+          <h2>Equity Curves</h2>
+          <div class="chart-container">
+            <canvas id="equity-chart"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Drawdown</h2>
+          <div class="chart-container">
+            <canvas id="drawdown-chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Monthly Returns Heatmap -->
+      <div class="grid" style="margin-top:24px;">
+        <div class="card">
+          <h2>Monthly Returns Heatmap</h2>
+          <div class="controls">
+            <label for="heatmap-strategy">Strategy:</label>
+            <select id="heatmap-strategy">
+              <option value="__all__">All Strategies</option>
+            </select>
+          </div>
+          <div class="table-wrapper">
+            <div id="heatmap-container"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 5: Symbol Performance -->
+      <div class="grid" style="margin-top:24px;">
+        <div class="card">
+          <h2>Symbol Performance</h2>
+          <div class="chart-container">
+            <canvas id="symbol-chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 6: Trade List -->
+      <div class="grid" style="margin-top:24px;">
+        <div class="card">
+          <h2>Trade List</h2>
+          <div class="controls">
+            <label>Strategy:</label>
+            <select id="filter-strategy"><option value="">All</option></select>
+            <label>Symbol:</label>
+            <select id="filter-symbol"><option value="">All</option></select>
+            <label>Side:</label>
+            <select id="filter-side">
+              <option value="">All</option>
+              <option value="long">Long</option>
+              <option value="short">Short</option>
+            </select>
+            <label>Profitable:</label>
+            <select id="filter-profitable">
+              <option value="">All</option>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+          </div>
+          <div class="table-wrapper">
+            <table id="trade-table">
+              <thead>
+                <tr>
+                  <th data-col="strategyName" data-type="string">Strategy</th>
+                  <th data-col="symbol" data-type="string">Symbol</th>
+                  <th data-col="side" data-type="string">Side</th>
+                  <th data-col="entryPrice" data-type="number">Entry</th>
+                  <th data-col="exitPrice" data-type="number">Exit</th>
+                  <th data-col="pnl" data-type="number">P&amp;L</th>
+                  <th data-col="duration" data-type="number">Duration</th>
+                  <th data-col="exitReason" data-type="string">Reason</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="trade-pagination"></div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           BTC Rotation Strategies Section
+           ============================================================ -->
+      <div id="btc-section" style="display:none;">
+        <div style="text-align:center;margin:48px 0 24px;padding-top:24px;border-top:2px solid #0f3460;">
+          <h2 style="font-size:1.5rem;color:#ffd93d;margin-bottom:4px;">BTC Rotation Strategies</h2>
+          <p style="color:#8888aa;font-size:0.9rem;">Altcoin rotation measured in BTC accumulation</p>
+        </div>
+
+        <!-- BTC Comparison Table -->
+        <div class="grid" style="margin-bottom:24px;">
+          <div class="card">
+            <h2>BTC Strategy Comparison</h2>
+            <div class="table-wrapper">
+              <table id="btc-comparison-table">
+                <thead>
+                  <tr>
+                    <th data-col="strategyName" data-type="string">Strategy</th>
+                    <th data-col="totalTrades" data-type="number">Trades</th>
+                    <th data-col="winRate" data-type="number">Win Rate</th>
+                    <th data-col="btcProfitPercent" data-type="number">BTC P&amp;L (%)</th>
+                    <th data-col="startingBtc" data-type="number">Start BTC</th>
+                    <th data-col="finalBtc" data-type="number">Final BTC</th>
+                    <th data-col="usdtValueStart" data-type="number">Start USD</th>
+                    <th data-col="usdtValueEnd" data-type="number">End USD</th>
+                    <th data-col="holdOnlyUsdtEnd" data-type="number">Hold Only USD</th>
+                    <th data-col="avgHoldTime" data-type="number">Avg Hold</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- BTC Equity Curve + Per-Alt Breakdown -->
+        <div class="grid-2">
+          <div class="card">
+            <h2>BTC Equity Curve</h2>
+            <div class="chart-container">
+              <canvas id="btc-equity-chart"></canvas>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Per-Altcoin P&amp;L (BTC)</h2>
+            <div class="chart-container">
+              <canvas id="btc-alt-chart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- BTC Trade List -->
+        <div class="grid" style="margin-top:24px;">
+          <div class="card">
+            <h2>BTC Rotation Trades</h2>
+            <div class="controls">
+              <label>Strategy:</label>
+              <select id="btc-filter-strategy"><option value="">All</option></select>
+              <label>Alt:</label>
+              <select id="btc-filter-alt"><option value="">All</option></select>
+              <label>Profitable:</label>
+              <select id="btc-filter-profitable">
+                <option value="">All</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+            <div class="table-wrapper">
+              <table id="btc-trade-table">
+                <thead>
+                  <tr>
+                    <th data-col="strategyName" data-type="string">Strategy</th>
+                    <th data-col="altSymbol" data-type="string">Alt</th>
+                    <th data-col="entryRatio" data-type="number">Entry Ratio</th>
+                    <th data-col="exitRatio" data-type="number">Exit Ratio</th>
+                    <th data-col="btcAllocated" data-type="number">BTC Allocated</th>
+                    <th data-col="btcPnl" data-type="number">BTC P&amp;L</th>
+                    <th data-col="duration" data-type="number">Duration</th>
+                    <th data-col="exitReason" data-type="string">Reason</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="pagination" id="btc-trade-pagination"></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /app-content -->
+  </div>
+
+  <!-- ============================================================
+       JavaScript
+       ============================================================ -->
+  <script>
+    // ==============================================================
+    // Global state
+    // ==============================================================
+    let summaryData = [];
+    let fullData = [];
+    let allTrades = [];
+    let filteredTrades = [];
+    let tradePage = 1;
+    const tradesPerPage = 50;
+    const CHART_COLORS = ['#00ff88', '#ff6b6b', '#4ecdc4', '#ffd93d', '#6c5ce7', '#a8e6cf',
+                          '#ff9f43', '#ee5a24', '#0abde3', '#c8d6e5', '#f368e0', '#01a3a4'];
+    let equityChart = null;
+    let drawdownChart = null;
+    let symbolChart = null;
+
+    // Track sort state for tables
+    const sortState = {};
+
+    // ==============================================================
+    // Fetch data
+    // ==============================================================
+    async function loadData() {
+      try {
+        const [summaryRes, fullRes] = await Promise.all([
+          fetch('/api/results'),
+          fetch('/api/results/full'),
+        ]);
+
+        if (!summaryRes.ok) {
+          throw new Error('No backtest results found. Run a backtest first.');
+        }
+
+        summaryData = await summaryRes.json();
+        fullData = fullRes.ok ? await fullRes.json() : summaryData;
+
+        document.getElementById('app-loading').style.display = 'none';
+        document.getElementById('app-content').style.display = 'block';
+
+        renderTable(summaryData);
+        renderEquityCurves(fullData);
+        renderDrawdownChart(fullData);
+        renderMonthlyHeatmap(fullData);
+        renderSymbolChart(fullData);
+        renderTradeList(fullData);
+      } catch (err) {
+        document.getElementById('app-loading').innerHTML =
+          '<p class="error-msg">' + escapeHtml(err.message) + '</p>';
+      }
+    }
+
+    // ==============================================================
+    // Helpers
+    // ==============================================================
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function fmt(val, decimals = 2) {
+      if (val == null || isNaN(val)) return '-';
+      return Number(val).toFixed(decimals);
+    }
+
+    function fmtDollar(val) {
+      if (val == null || isNaN(val)) return '-';
+      const prefix = val >= 0 ? '+$' : '-$';
+      return prefix + Math.abs(val).toFixed(2);
+    }
+
+    function fmtPct(val) {
+      if (val == null || isNaN(val)) return '-';
+      return (val >= 0 ? '+' : '') + val.toFixed(2) + '%';
+    }
+
+    function fmtDuration(ms) {
+      if (!ms || isNaN(ms)) return '-';
+      const hours = Math.floor(ms / 3600000);
+      const mins = Math.floor((ms % 3600000) / 60000);
+      if (hours >= 24) {
+        const days = Math.floor(hours / 24);
+        const remHours = hours % 24;
+        return days + 'd ' + remHours + 'h';
+      }
+      return hours + 'h ' + mins + 'm';
+    }
+
+    function pnlClass(val) {
+      if (val > 0) return 'positive';
+      if (val < 0) return 'negative';
+      return '';
+    }
+
+    function strategyLabel(r) {
+      return r.strategyName + ' (' + r.leverage + 'x)';
+    }
+
+    function heatColor(pct) {
+      if (pct > 10) return 'rgba(0,255,136,0.45)';
+      if (pct > 5)  return 'rgba(0,255,136,0.30)';
+      if (pct > 0)  return 'rgba(0,255,136,0.15)';
+      if (pct === 0) return 'transparent';
+      if (pct > -5) return 'rgba(255,68,68,0.15)';
+      if (pct > -10) return 'rgba(255,68,68,0.30)';
+      return 'rgba(255,68,68,0.45)';
+    }
+
+    // ==============================================================
+    // Section 1: Strategy Comparison Table
+    // ==============================================================
+    function renderTable(data) {
+      const tbody = document.querySelector('#comparison-table tbody');
+      tbody.innerHTML = '';
+
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#8888aa;">No results</td></tr>';
+        return;
+      }
+
+      // Find best values for highlighting
+      const metrics = ['winRate', 'totalPnl', 'totalPnlPercent', 'profitFactor', 'sharpeRatio'];
+      const best = {};
+      metrics.forEach((m) => {
+        best[m] = Math.max(...data.map((r) => r[m] || 0));
+      });
+      // For max drawdown, lower absolute value is better
+      best.maxDrawdownPercent = Math.min(...data.map((r) => Math.abs(r.maxDrawdownPercent || 0)));
+
+      data.forEach((r) => {
+        const tr = document.createElement('tr');
+        const isBest = (metric, val) => {
+          if (metric === 'maxDrawdownPercent') return Math.abs(val) === best[metric];
+          return val === best[metric];
+        };
+
+        tr.innerHTML =
+          '<td>' + escapeHtml(strategyLabel(r)) + '</td>' +
+          '<td>' + r.leverage + 'x</td>' +
+          '<td>' + r.totalTrades + '</td>' +
+          '<td class="' + (isBest('winRate', r.winRate) ? 'best-cell' : '') + '">' + fmtPct(r.winRate) + '</td>' +
+          '<td class="' + pnlClass(r.totalPnl) + (isBest('totalPnl', r.totalPnl) ? ' best-cell' : '') + '">' + fmtDollar(r.totalPnl) + '</td>' +
+          '<td class="' + pnlClass(r.totalPnlPercent) + (isBest('totalPnlPercent', r.totalPnlPercent) ? ' best-cell' : '') + '">' + fmtPct(r.totalPnlPercent) + '</td>' +
+          '<td class="' + (isBest('profitFactor', r.profitFactor) ? 'best-cell' : '') + '">' + fmt(r.profitFactor) + '</td>' +
+          '<td class="negative' + (isBest('maxDrawdownPercent', r.maxDrawdownPercent) ? ' best-cell' : '') + '">' + fmt(Math.abs(r.maxDrawdownPercent || 0)) + '%</td>' +
+          '<td class="' + (isBest('sharpeRatio', r.sharpeRatio) ? 'best-cell' : '') + '">' + fmt(r.sharpeRatio) + '</td>';
+
+        tbody.appendChild(tr);
+      });
+
+      // Make headers sortable
+      setupTableSort('comparison-table', data, renderTable);
+    }
+
+    function setupTableSort(tableId, data, renderFn) {
+      const ths = document.querySelectorAll('#' + tableId + ' thead th');
+      ths.forEach((th) => {
+        th.addEventListener('click', () => {
+          const col = th.getAttribute('data-col');
+          const type = th.getAttribute('data-type');
+          if (!col) return;
+
+          const key = tableId + '_' + col;
+          const asc = sortState[key] === 'asc' ? 'desc' : 'asc';
+          sortState[key] = asc;
+
+          const sorted = [...data].sort((a, b) => {
+            let va = a[col], vb = b[col];
+            if (type === 'number') {
+              va = Number(va) || 0;
+              vb = Number(vb) || 0;
+              return asc === 'asc' ? va - vb : vb - va;
+            }
+            va = String(va || '');
+            vb = String(vb || '');
+            return asc === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+          });
+
+          renderFn(sorted);
+        });
+      });
+    }
+
+    // ==============================================================
+    // Section 2: Equity Curves
+    // ==============================================================
+    function renderEquityCurves(data) {
+      if (!data || data.length === 0) return;
+
+      const ctx = document.getElementById('equity-chart').getContext('2d');
+
+      const datasets = data.map((r, i) => {
+        const curve = r.equityCurve || [];
+        return {
+          label: strategyLabel(r),
+          data: curve.map((p) => ({ x: p.timestamp, y: p.equity })),
+          borderColor: CHART_COLORS[i % CHART_COLORS.length],
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: 0.1,
+        };
+      });
+
+      // Add starting capital reference line
+      const startCap = data[0]?.startingCapital || 500;
+      const allTimestamps = data.flatMap((r) => (r.equityCurve || []).map((p) => p.timestamp));
+      const minT = Math.min(...allTimestamps);
+      const maxT = Math.max(...allTimestamps);
+
+      datasets.push({
+        label: 'Starting Capital ($' + startCap + ')',
+        data: [{ x: minT, y: startCap }, { x: maxT, y: startCap }],
+        borderColor: 'rgba(255,255,255,0.2)',
+        borderDash: [6, 4],
+        borderWidth: 1,
+        pointRadius: 0,
+        fill: false,
+      });
+
+      if (equityChart) equityChart.destroy();
+      equityChart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              labels: { color: '#e0e0e0', font: { size: 11 }, boxWidth: 14, padding: 12 },
+              position: 'top',
+            },
+            tooltip: {
+              callbacks: {
+                title: (items) => {
+                  if (!items.length) return '';
+                  return new Date(items[0].parsed.x).toLocaleDateString();
+                },
+                label: (item) => item.dataset.label + ': $' + fmt(item.parsed.y),
+              },
+            },
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              ticks: {
+                color: '#8888aa',
+                callback: (val) => {
+                  const d = new Date(val);
+                  return d.getMonth() + 1 + '/' + d.getDate();
+                },
+                maxTicksLimit: 12,
+              },
+              grid: { color: 'rgba(255,255,255,0.05)' },
+            },
+            y: {
+              ticks: {
+                color: '#8888aa',
+                callback: (val) => '$' + val,
+              },
+              grid: { color: 'rgba(255,255,255,0.05)' },
+            },
+          },
+        },
+      });
+    }
+
+    // ==============================================================
+    // Section 4: Drawdown Chart
+    // ==============================================================
+    function renderDrawdownChart(data) {
+      if (!data || data.length === 0) return;
+
+      const ctx = document.getElementById('drawdown-chart').getContext('2d');
+
+      const datasets = data.map((r, i) => {
+        const curve = r.equityCurve || [];
+        let peak = r.startingCapital || 500;
+        const ddPoints = curve.map((p) => {
+          if (p.equity > peak) peak = p.equity;
+          const dd = peak > 0 ? ((p.equity - peak) / peak) * 100 : 0;
+          return { x: p.timestamp, y: dd };
+        });
+
+        return {
+          label: strategyLabel(r),
+          data: ddPoints,
+          borderColor: CHART_COLORS[i % CHART_COLORS.length],
+          backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + '15',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: true,
+        };
+      });
+
+      if (drawdownChart) drawdownChart.destroy();
+      drawdownChart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              labels: { color: '#e0e0e0', font: { size: 11 }, boxWidth: 14, padding: 12 },
+              position: 'top',
+            },
+            tooltip: {
+              callbacks: {
+                title: (items) => {
+                  if (!items.length) return '';
+                  return new Date(items[0].parsed.x).toLocaleDateString();
+                },
+                label: (item) => item.dataset.label + ': ' + fmt(item.parsed.y) + '%',
+              },
+            },
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              ticks: {
+                color: '#8888aa',
+                callback: (val) => {
+                  const d = new Date(val);
+                  return d.getMonth() + 1 + '/' + d.getDate();
+                },
+                maxTicksLimit: 12,
+              },
+              grid: { color: 'rgba(255,255,255,0.05)' },
+            },
+            y: {
+              max: 0,
+              ticks: {
+                color: '#8888aa',
+                callback: (val) => val + '%',
+              },
+              grid: { color: 'rgba(255,255,255,0.05)' },
+            },
+          },
+        },
+      });
+    }
+
+    // ==============================================================
+    // Section 3: Monthly Returns Heatmap
+    // ==============================================================
+    function renderMonthlyHeatmap(data) {
+      if (!data || data.length === 0) return;
+
+      // Populate strategy dropdown
+      const select = document.getElementById('heatmap-strategy');
+      // Clear existing options beyond "All"
+      while (select.options.length > 1) select.remove(1);
+      data.forEach((r) => {
+        const opt = document.createElement('option');
+        opt.value = r.strategyName;
+        opt.textContent = strategyLabel(r);
+        select.appendChild(opt);
+      });
+
+      select.addEventListener('change', () => buildHeatmap(data, select.value));
+      buildHeatmap(data, '__all__');
+    }
+
+    function buildHeatmap(data, filter) {
+      const container = document.getElementById('heatmap-container');
+      container.innerHTML = '';
+
+      const filtered = filter === '__all__' ? data : data.filter((r) => r.strategyName === filter);
+      if (filtered.length === 0) return;
+
+      // Collect all unique months across all strategies
+      const monthSet = new Set();
+      filtered.forEach((r) => {
+        (r.monthlyReturns || []).forEach((m) => monthSet.add(m.month));
+      });
+      const months = Array.from(monthSet).sort();
+      if (months.length === 0) {
+        container.innerHTML = '<p style="color:#8888aa;">No monthly data available.</p>';
+        return;
+      }
+
+      // Build table
+      const table = document.createElement('table');
+      table.style.fontSize = '0.8rem';
+
+      // Header row
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      const th0 = document.createElement('th');
+      th0.textContent = 'Strategy';
+      th0.style.textAlign = 'left';
+      headerRow.appendChild(th0);
+      months.forEach((m) => {
+        const th = document.createElement('th');
+        th.textContent = m;
+        th.style.fontSize = '0.75rem';
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      // Body rows
+      const tbody = document.createElement('tbody');
+      filtered.forEach((r) => {
+        const tr = document.createElement('tr');
+        const tdLabel = document.createElement('td');
+        tdLabel.textContent = strategyLabel(r);
+        tdLabel.style.textAlign = 'left';
+        tdLabel.style.fontWeight = '600';
+        tr.appendChild(tdLabel);
+
+        const monthMap = {};
+        (r.monthlyReturns || []).forEach((m) => { monthMap[m.month] = m; });
+
+        months.forEach((m) => {
+          const td = document.createElement('td');
+          const entry = monthMap[m];
+          if (entry) {
+            td.textContent = fmtPct(entry.pnlPercent);
+            td.style.background = heatColor(entry.pnlPercent);
+            td.className = pnlClass(entry.pnlPercent);
+          } else {
+            td.textContent = '-';
+            td.style.color = '#555';
+          }
+          tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      container.appendChild(table);
+    }
+
+    // ==============================================================
+    // Section 5: Symbol Performance Bar Chart
+    // ==============================================================
+    function renderSymbolChart(data) {
+      if (!data || data.length === 0) return;
+
+      const ctx = document.getElementById('symbol-chart').getContext('2d');
+
+      // Collect all unique symbols
+      const symbolSet = new Set();
+      data.forEach((r) => {
+        (r.symbolBreakdown || []).forEach((s) => symbolSet.add(s.symbol));
+      });
+      const symbols = Array.from(symbolSet).sort();
+
+      const datasets = data.map((r, i) => {
+        const symbolMap = {};
+        (r.symbolBreakdown || []).forEach((s) => { symbolMap[s.symbol] = s.pnl; });
+
+        return {
+          label: strategyLabel(r),
+          data: symbols.map((sym) => symbolMap[sym] || 0),
+          backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + 'aa',
+          borderColor: CHART_COLORS[i % CHART_COLORS.length],
+          borderWidth: 1,
+        };
+      });
+
+      if (symbolChart) symbolChart.destroy();
+      symbolChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: symbols, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#e0e0e0', font: { size: 11 }, boxWidth: 14, padding: 12 },
+              position: 'top',
+            },
+            tooltip: {
+              callbacks: {
+                label: (item) => item.dataset.label + ': $' + fmt(item.parsed.y),
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: { color: '#8888aa' },
+              grid: { color: 'rgba(255,255,255,0.05)' },
+            },
+            y: {
+              ticks: {
+                color: '#8888aa',
+                callback: (val) => '$' + val,
+              },
+              grid: { color: 'rgba(255,255,255,0.05)' },
+            },
+          },
+        },
+      });
+    }
+
+    // ==============================================================
+    // Section 6: Trade List
+    // ==============================================================
+    function renderTradeList(data) {
+      if (!data || data.length === 0) return;
+
+      // Build flat trade list with strategy labels
+      allTrades = [];
+      data.forEach((r) => {
+        (r.trades || []).forEach((t) => {
+          allTrades.push({
+            strategyName: strategyLabel(r),
+            symbol: t.symbol,
+            side: t.side,
+            entryPrice: t.entryPrice,
+            exitPrice: t.exitPrice,
+            pnl: t.pnl,
+            duration: t.duration,
+            exitReason: t.exitReason || t.reason || '-',
+          });
+        });
+      });
+
+      // Populate filter dropdowns
+      const stratSelect = document.getElementById('filter-strategy');
+      const symSelect = document.getElementById('filter-symbol');
+      while (stratSelect.options.length > 1) stratSelect.remove(1);
+      while (symSelect.options.length > 1) symSelect.remove(1);
+
+      const stratNames = [...new Set(allTrades.map((t) => t.strategyName))].sort();
+      stratNames.forEach((s) => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        stratSelect.appendChild(opt);
+      });
+
+      const symNames = [...new Set(allTrades.map((t) => t.symbol))].sort();
+      symNames.forEach((s) => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        symSelect.appendChild(opt);
+      });
+
+      // Attach filter listeners
+      const filters = [stratSelect, symSelect,
+        document.getElementById('filter-side'),
+        document.getElementById('filter-profitable')];
+      filters.forEach((el) => el.addEventListener('change', applyTradeFilters));
+
+      applyTradeFilters();
+      setupTradeTableSort();
+    }
+
+    function applyTradeFilters() {
+      const strat = document.getElementById('filter-strategy').value;
+      const sym = document.getElementById('filter-symbol').value;
+      const side = document.getElementById('filter-side').value;
+      const profitable = document.getElementById('filter-profitable').value;
+
+      filteredTrades = allTrades.filter((t) => {
+        if (strat && t.strategyName !== strat) return false;
+        if (sym && t.symbol !== sym) return false;
+        if (side && t.side !== side) return false;
+        if (profitable === 'yes' && t.pnl <= 0) return false;
+        if (profitable === 'no' && t.pnl > 0) return false;
+        return true;
+      });
+
+      tradePage = 1;
+      renderTradePage();
+    }
+
+    function renderTradePage() {
+      const tbody = document.querySelector('#trade-table tbody');
+      tbody.innerHTML = '';
+
+      const totalPages = Math.max(1, Math.ceil(filteredTrades.length / tradesPerPage));
+      if (tradePage > totalPages) tradePage = totalPages;
+
+      const start = (tradePage - 1) * tradesPerPage;
+      const end = Math.min(start + tradesPerPage, filteredTrades.length);
+      const page = filteredTrades.slice(start, end);
+
+      if (page.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#8888aa;">No trades match filters</td></tr>';
+      } else {
+        page.forEach((t) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td>' + escapeHtml(t.strategyName) + '</td>' +
+            '<td>' + escapeHtml(t.symbol) + '</td>' +
+            '<td class="' + (t.side === 'long' ? 'positive' : 'negative') + '">' + t.side.toUpperCase() + '</td>' +
+            '<td>$' + fmt(t.entryPrice, 4) + '</td>' +
+            '<td>$' + fmt(t.exitPrice, 4) + '</td>' +
+            '<td class="' + pnlClass(t.pnl) + '">' + fmtDollar(t.pnl) + '</td>' +
+            '<td>' + fmtDuration(t.duration) + '</td>' +
+            '<td>' + escapeHtml(t.exitReason) + '</td>';
+          tbody.appendChild(tr);
+        });
+      }
+
+      // Pagination controls
+      const pagDiv = document.getElementById('trade-pagination');
+      pagDiv.innerHTML = '';
+
+      const prevBtn = document.createElement('button');
+      prevBtn.textContent = 'Prev';
+      prevBtn.disabled = tradePage <= 1;
+      prevBtn.addEventListener('click', () => { tradePage--; renderTradePage(); });
+      pagDiv.appendChild(prevBtn);
+
+      const info = document.createElement('span');
+      info.textContent = 'Page ' + tradePage + ' of ' + totalPages +
+        ' (' + filteredTrades.length + ' trades)';
+      pagDiv.appendChild(info);
+
+      const nextBtn = document.createElement('button');
+      nextBtn.textContent = 'Next';
+      nextBtn.disabled = tradePage >= totalPages;
+      nextBtn.addEventListener('click', () => { tradePage++; renderTradePage(); });
+      pagDiv.appendChild(nextBtn);
+    }
+
+    function setupTradeTableSort() {
+      const ths = document.querySelectorAll('#trade-table thead th');
+      ths.forEach((th) => {
+        th.addEventListener('click', () => {
+          const col = th.getAttribute('data-col');
+          const type = th.getAttribute('data-type');
+          if (!col) return;
+
+          const key = 'trade-table_' + col;
+          const asc = sortState[key] === 'asc' ? 'desc' : 'asc';
+          sortState[key] = asc;
+
+          filteredTrades.sort((a, b) => {
+            let va = a[col], vb = b[col];
+            if (type === 'number') {
+              va = Number(va) || 0;
+              vb = Number(vb) || 0;
+              return asc === 'asc' ? va - vb : vb - va;
+            }
+            va = String(va || '');
+            vb = String(vb || '');
+            return asc === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+          });
+
+          tradePage = 1;
+          renderTradePage();
+        });
+      });
+    }
+
+    // ==============================================================
+    // BTC Rotation Strategies
+    // ==============================================================
+    let btcData = [];
+    let btcEquityChart = null;
+    let btcAltChart = null;
+    let allBtcTrades = [];
+    let filteredBtcTrades = [];
+    let btcTradePage = 1;
+    const btcTradesPerPage = 50;
+
+    const BTC_COLORS = ['#ffd93d', '#ff9f43'];
+
+    function fmtBtc(val, dec = 6) {
+      if (val == null || isNaN(val)) return '-';
+      const sign = val >= 0 ? '+' : '';
+      return sign + Number(val).toFixed(dec) + ' BTC';
+    }
+
+    async function loadBtcData() {
+      try {
+        const res = await fetch('/api/btc-results');
+        if (!res.ok) return; // no btc results, silently skip
+        btcData = await res.json();
+        if (!btcData || btcData.length === 0) return;
+
+        document.getElementById('btc-section').style.display = 'block';
+        renderBtcTable(btcData);
+        renderBtcEquityCurve(btcData);
+        renderBtcAltChart(btcData);
+        renderBtcTradeList(btcData);
+      } catch {
+        // silently skip if no btc results
+      }
+    }
+
+    function renderBtcTable(data) {
+      const tbody = document.querySelector('#btc-comparison-table tbody');
+      tbody.innerHTML = '';
+
+      data.forEach((r) => {
+        const tr = document.createElement('tr');
+        const usdReturn = r.usdtValueStart > 0
+          ? ((r.usdtValueEnd - r.usdtValueStart) / r.usdtValueStart * 100)
+          : 0;
+        const holdReturn = r.usdtValueStart > 0
+          ? ((r.holdOnlyUsdtEnd - r.usdtValueStart) / r.usdtValueStart * 100)
+          : 0;
+
+        tr.innerHTML =
+          '<td>' + escapeHtml(r.strategyName) + '</td>' +
+          '<td>' + r.totalTrades + '</td>' +
+          '<td>' + fmtPct(r.winRate) + '</td>' +
+          '<td class="' + pnlClass(r.btcProfitPercent) + '">' + fmtPct(r.btcProfitPercent) + '</td>' +
+          '<td>' + r.startingBtc.toFixed(5) + '</td>' +
+          '<td class="' + pnlClass(r.btcProfit) + '">' + r.finalBtc.toFixed(5) + '</td>' +
+          '<td>$' + fmt(r.usdtValueStart) + '</td>' +
+          '<td class="' + pnlClass(usdReturn) + '">$' + fmt(r.usdtValueEnd) + '</td>' +
+          '<td>$' + fmt(r.holdOnlyUsdtEnd) + '</td>' +
+          '<td>' + fmtDuration(r.avgHoldTime) + '</td>';
+
+        tbody.appendChild(tr);
+      });
+
+      // Add a "Just Hold BTC" row for reference
+      if (data.length > 0) {
+        const ref = data[0];
+        const holdReturn = ref.usdtValueStart > 0
+          ? ((ref.holdOnlyUsdtEnd - ref.usdtValueStart) / ref.usdtValueStart * 100)
+          : 0;
+        const tr = document.createElement('tr');
+        tr.style.opacity = '0.6';
+        tr.style.fontStyle = 'italic';
+        tr.innerHTML =
+          '<td>Just Hold BTC (baseline)</td>' +
+          '<td>0</td>' +
+          '<td>-</td>' +
+          '<td class="' + pnlClass(0) + '">0.00%</td>' +
+          '<td>' + ref.startingBtc.toFixed(5) + '</td>' +
+          '<td>' + ref.startingBtc.toFixed(5) + '</td>' +
+          '<td>$' + fmt(ref.usdtValueStart) + '</td>' +
+          '<td class="' + pnlClass(holdReturn) + '">$' + fmt(ref.holdOnlyUsdtEnd) + '</td>' +
+          '<td>$' + fmt(ref.holdOnlyUsdtEnd) + '</td>' +
+          '<td>-</td>';
+        document.querySelector('#btc-comparison-table tbody').appendChild(tr);
+      }
+    }
+
+    function renderBtcEquityCurve(data) {
+      if (!data || data.length === 0) return;
+      const ctx = document.getElementById('btc-equity-chart').getContext('2d');
+
+      const datasets = data.map((r, i) => {
+        const curve = r.equityCurve || [];
+        return {
+          label: r.strategyName,
+          data: curve.map((p) => ({ x: p.timestamp, y: p.btcEquity })),
+          borderColor: BTC_COLORS[i % BTC_COLORS.length],
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+        };
+      });
+
+      // Add hold baseline
+      if (data[0]) {
+        const curve = data[0].equityCurve || [];
+        if (curve.length > 0) {
+          datasets.push({
+            label: 'Just Hold BTC',
+            data: [
+              { x: curve[0].timestamp, y: data[0].startingBtc },
+              { x: curve[curve.length - 1].timestamp, y: data[0].startingBtc },
+            ],
+            borderColor: 'rgba(255,255,255,0.3)',
+            borderDash: [6, 4],
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: false,
+          });
+        }
+      }
+
+      if (btcEquityChart) btcEquityChart.destroy();
+      btcEquityChart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              labels: { color: '#e0e0e0', font: { size: 11 }, boxWidth: 14, padding: 12 },
+            },
+            tooltip: {
+              callbacks: {
+                title: (items) => !items.length ? '' : new Date(items[0].parsed.x).toLocaleDateString(),
+                label: (item) => item.dataset.label + ': ' + item.parsed.y.toFixed(5) + ' BTC',
+              },
+            },
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              ticks: {
+                color: '#8888aa',
+                callback: (val) => { const d = new Date(val); return (d.getMonth() + 1) + '/' + d.getDate(); },
+                maxTicksLimit: 12,
+              },
+              grid: { color: 'rgba(255,255,255,0.05)' },
+            },
+            y: {
+              ticks: {
+                color: '#8888aa',
+                callback: (val) => val.toFixed(4) + ' BTC',
+              },
+              grid: { color: 'rgba(255,255,255,0.05)' },
+            },
+          },
+        },
+      });
+    }
+
+    function renderBtcAltChart(data) {
+      if (!data || data.length === 0) return;
+      const ctx = document.getElementById('btc-alt-chart').getContext('2d');
+
+      // Collect all alt symbols
+      const altSet = new Set();
+      data.forEach((r) => (r.perAltBreakdown || []).forEach((a) => altSet.add(a.symbol)));
+      const alts = Array.from(altSet).sort();
+
+      const datasets = data.map((r, i) => {
+        const altMap = {};
+        (r.perAltBreakdown || []).forEach((a) => { altMap[a.symbol] = a.btcPnl; });
+        return {
+          label: r.strategyName,
+          data: alts.map((sym) => altMap[sym] || 0),
+          backgroundColor: BTC_COLORS[i % BTC_COLORS.length] + 'aa',
+          borderColor: BTC_COLORS[i % BTC_COLORS.length],
+          borderWidth: 1,
+        };
+      });
+
+      if (btcAltChart) btcAltChart.destroy();
+      btcAltChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: alts, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#e0e0e0', font: { size: 11 }, boxWidth: 14, padding: 12 },
+            },
+            tooltip: {
+              callbacks: {
+                label: (item) => item.dataset.label + ': ' + (item.parsed.y >= 0 ? '+' : '') + item.parsed.y.toFixed(6) + ' BTC',
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: { color: '#8888aa' },
+              grid: { color: 'rgba(255,255,255,0.05)' },
+            },
+            y: {
+              ticks: {
+                color: '#8888aa',
+                callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(5),
+              },
+              grid: { color: 'rgba(255,255,255,0.05)' },
+            },
+          },
+        },
+      });
+    }
+
+    function renderBtcTradeList(data) {
+      if (!data || data.length === 0) return;
+
+      allBtcTrades = [];
+      data.forEach((r) => {
+        (r.trades || []).forEach((t) => {
+          allBtcTrades.push({
+            strategyName: r.strategyName,
+            altSymbol: t.altSymbol,
+            entryRatio: t.entryRatio,
+            exitRatio: t.exitRatio,
+            btcAllocated: t.btcAllocated,
+            btcPnl: t.btcPnl,
+            duration: t.duration,
+            exitReason: t.exitReason || t.reason || '-',
+          });
+        });
+      });
+
+      // Populate filters
+      const stratSelect = document.getElementById('btc-filter-strategy');
+      const altSelect = document.getElementById('btc-filter-alt');
+      while (stratSelect.options.length > 1) stratSelect.remove(1);
+      while (altSelect.options.length > 1) altSelect.remove(1);
+
+      [...new Set(allBtcTrades.map((t) => t.strategyName))].sort().forEach((s) => {
+        const opt = document.createElement('option'); opt.value = s; opt.textContent = s;
+        stratSelect.appendChild(opt);
+      });
+      [...new Set(allBtcTrades.map((t) => t.altSymbol))].sort().forEach((s) => {
+        const opt = document.createElement('option'); opt.value = s; opt.textContent = s;
+        altSelect.appendChild(opt);
+      });
+
+      [stratSelect, altSelect, document.getElementById('btc-filter-profitable')]
+        .forEach((el) => el.addEventListener('change', applyBtcTradeFilters));
+
+      applyBtcTradeFilters();
+      setupBtcTradeSort();
+    }
+
+    function applyBtcTradeFilters() {
+      const strat = document.getElementById('btc-filter-strategy').value;
+      const alt = document.getElementById('btc-filter-alt').value;
+      const profitable = document.getElementById('btc-filter-profitable').value;
+
+      filteredBtcTrades = allBtcTrades.filter((t) => {
+        if (strat && t.strategyName !== strat) return false;
+        if (alt && t.altSymbol !== alt) return false;
+        if (profitable === 'yes' && t.btcPnl <= 0) return false;
+        if (profitable === 'no' && t.btcPnl > 0) return false;
+        return true;
+      });
+
+      btcTradePage = 1;
+      renderBtcTradePage();
+    }
+
+    function renderBtcTradePage() {
+      const tbody = document.querySelector('#btc-trade-table tbody');
+      tbody.innerHTML = '';
+
+      const totalPages = Math.max(1, Math.ceil(filteredBtcTrades.length / btcTradesPerPage));
+      if (btcTradePage > totalPages) btcTradePage = totalPages;
+
+      const start = (btcTradePage - 1) * btcTradesPerPage;
+      const page = filteredBtcTrades.slice(start, start + btcTradesPerPage);
+
+      if (page.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#8888aa;">No trades match filters</td></tr>';
+      } else {
+        page.forEach((t) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td>' + escapeHtml(t.strategyName) + '</td>' +
+            '<td>' + escapeHtml(t.altSymbol) + '</td>' +
+            '<td>' + (t.entryRatio ? t.entryRatio.toExponential(4) : '-') + '</td>' +
+            '<td>' + (t.exitRatio ? t.exitRatio.toExponential(4) : '-') + '</td>' +
+            '<td>' + (t.btcAllocated ? t.btcAllocated.toFixed(5) : '-') + '</td>' +
+            '<td class="' + pnlClass(t.btcPnl) + '">' + fmtBtc(t.btcPnl) + '</td>' +
+            '<td>' + fmtDuration(t.duration) + '</td>' +
+            '<td>' + escapeHtml(t.exitReason) + '</td>';
+          tbody.appendChild(tr);
+        });
+      }
+
+      const pagDiv = document.getElementById('btc-trade-pagination');
+      pagDiv.innerHTML = '';
+
+      const prevBtn = document.createElement('button');
+      prevBtn.textContent = 'Prev';
+      prevBtn.disabled = btcTradePage <= 1;
+      prevBtn.addEventListener('click', () => { btcTradePage--; renderBtcTradePage(); });
+      pagDiv.appendChild(prevBtn);
+
+      const info = document.createElement('span');
+      info.textContent = 'Page ' + btcTradePage + ' of ' + totalPages +
+        ' (' + filteredBtcTrades.length + ' trades)';
+      pagDiv.appendChild(info);
+
+      const nextBtn = document.createElement('button');
+      nextBtn.textContent = 'Next';
+      nextBtn.disabled = btcTradePage >= totalPages;
+      nextBtn.addEventListener('click', () => { btcTradePage++; renderBtcTradePage(); });
+      pagDiv.appendChild(nextBtn);
+    }
+
+    function setupBtcTradeSort() {
+      document.querySelectorAll('#btc-trade-table thead th').forEach((th) => {
+        th.addEventListener('click', () => {
+          const col = th.getAttribute('data-col');
+          const type = th.getAttribute('data-type');
+          if (!col) return;
+
+          const key = 'btc-trade_' + col;
+          const asc = sortState[key] === 'asc' ? 'desc' : 'asc';
+          sortState[key] = asc;
+
+          filteredBtcTrades.sort((a, b) => {
+            let va = a[col], vb = b[col];
+            if (type === 'number') {
+              va = Number(va) || 0; vb = Number(vb) || 0;
+              return asc === 'asc' ? va - vb : vb - va;
+            }
+            return asc === 'asc' ? String(va || '').localeCompare(String(vb || '')) : String(vb || '').localeCompare(String(va || ''));
+          });
+
+          btcTradePage = 1;
+          renderBtcTradePage();
+        });
+      });
+    }
+
+    // ==============================================================
+    // Boot
+    // ==============================================================
+    window.addEventListener('DOMContentLoaded', async () => {
+      await loadData();
+      await loadBtcData();
+    });
+  </script>
+</body>
+</html>
